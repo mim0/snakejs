@@ -1,0 +1,15 @@
+body {
+  display: grid;
+  grid-template-columns: 850px 350px;
+}
+
+.tabletop {}
+
+.sidebar {
+  grid-column-start: 2;
+  background-color: lightgrey;
+  padding: 10px;
+  border: 1px solid grey;
+}
+
+.info {}
