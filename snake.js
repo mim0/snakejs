@@ -1,61 +1,65 @@
-const canv = document.getElementById('game_container');
-const ctx = canv.getContext('2d');
+const canvas = document.getElementById('game_container');
+const ctx = canvas.getContext('2d');
 
-const colors = {
-  black: '#333',
-  grey: 'grey',
-  white: 'white',
-  snake: 'lightgreen',
-  head: 'yellow',
-  food: 'red',
-  power: 'blue'
+const config = {
+  tiles: 30,
+  framesPerSecond: 30,
+  powerupSpawnVelocityMin: 15,
+  powerupSpawnChance: 0.001,
+  colors: {
+    black: '#333',
+    grey: 'grey',
+    white: 'white',
+    snake: 'lightgreen',
+    head: 'yellow',
+    food: 'red',
+    power: 'blue'
+  },
+  directions: {
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
+    ArrowRight: [1, 0],
+    ArrowLeft: [-1, 0]
+  }
 };
 
-const dirs = {
-  ArrowUp: [0, -1],
-  ArrowDown: [0, 1],
-  ArrowRight: [1, 0],
-  ArrowLeft: [-1, 0]
+const state = {
+  forceUpdate: false,
+  frame: 0,
+  tileSize: 0,
+  snake: [
+    [0, 0],
+    [1, 0],
+    [2, 0]
+  ],
+  running: null,
+  gameOver: false,
+  direction: config.directions.ArrowRight,
+  velocity: 1,
+  food: [],
+  powerup: []
 };
 
-let forceUpdate = false;
+function samePos(a, b) {
+  return a[0] === b[0] && a[1] === b[1];
+}
 
-const tiles = 30;
-let gridDist = canv.width / tiles;
-
-let frame = 0;
-const frames_per_second = 30;
-
-let snake = [
-  [0, 0],
-  [1, 0],
-  [2, 0]
-];
-
-let running = null;
-
-let direction = dirs.ArrowRight;
-let velocity = 1;
-
-let food = [randomFood()];
-
-let powerup = [];
-
-window.onload = init();
+function toKey(pos) {
+  return `${pos[0]},${pos[1]}`;
+}
 
 function drawGrid() {
-  rect(0, 0, canv.width, canv.height, colors.black);
+  rect(0, 0, canvas.width, canvas.height, config.colors.black);
 
   ctx.beginPath();
 
-  let x = 0;
-  for (var i = 0; i <= tiles; i++) {
-    ctx.strokeStyle = colors.grey;
+  for (let i = 0; i <= config.tiles; i++) {
+    const x = i * state.tileSize;
+    ctx.strokeStyle = config.colors.grey;
     ctx.moveTo(x, 0);
-    ctx.lineTo(x, canv.height);
+    ctx.lineTo(x, canvas.height);
     ctx.moveTo(0, x);
-    ctx.lineTo(canv.width, x);
-    x = gridDist * i;
+    ctx.lineTo(canvas.width, x);
   }
   ctx.stroke();
 }
@@ -71,149 +75,183 @@ function setListeners() {
   document.addEventListener('keydown', controls);
 }
 
+function isOppositeDirection(nextDirection) {
+  return state.direction[0] + nextDirection[0] === 0 && state.direction[1] + nextDirection[1] === 0;
+}
+
 function controls(event) {
-  if (!(event.key === 'ArrowUp' && (direction[0] === dirs.ArrowDown[0] && direction[1] === dirs.ArrowDown[1])) &&
-    !(event.key === 'ArrowDown' && (direction[0] === dirs.ArrowUp[0] && direction[1] === dirs.ArrowUp[1])) &&
-    !(event.key === 'ArrowLeft' && (direction[0] === dirs.ArrowRight[0] && direction[1] === dirs.ArrowRight[1])) &&
-    !(event.key === 'ArrowRight' && (direction[0] === dirs.ArrowLeft[0] && direction[1] === dirs.ArrowLeft[1]))
-  ) {
-    forceUpdate = true;
-    direction = dirs[event.key] || direction;
+  const nextDirection = config.directions[event.key];
+  if (!nextDirection || isOppositeDirection(nextDirection)) {
+    return;
   }
+
+  state.forceUpdate = true;
+  state.direction = nextDirection;
 }
 
 function drawSnake() {
-  for (let i = 0; i < snake.length; i++) {
-    rect(snake[i][0] * gridDist, snake[i][1] * gridDist, gridDist, gridDist, colors.snake);
+  for (let i = 0; i < state.snake.length; i++) {
+    const piece = state.snake[i];
+    rect(piece[0] * state.tileSize, piece[1] * state.tileSize, state.tileSize, state.tileSize, config.colors.snake);
   }
-  rect(snake[snake.length -1][0] * gridDist, snake[snake.length -1][1] * gridDist, gridDist, gridDist, colors.head);
+
+  const head = state.snake[state.snake.length - 1];
+  rect(head[0] * state.tileSize, head[1] * state.tileSize, state.tileSize, state.tileSize, config.colors.head);
 }
 
 function drawFood() {
-  for (var i = 0; i < food.length; i++) {
-    rect(food[i][0] * gridDist, food[i][1] * gridDist, gridDist, gridDist, colors.food);
+  for (let i = 0; i < state.food.length; i++) {
+    const item = state.food[i];
+    rect(item[0] * state.tileSize, item[1] * state.tileSize, state.tileSize, state.tileSize, config.colors.food);
   }
 }
 
 function drawPowerup() {
-
-  for (let i = 0; i < powerup.length; i++) {
-    rect(powerup[i][0] * gridDist, powerup[i][1] * gridDist, gridDist, gridDist, colors.power);
+  for (let i = 0; i < state.powerup.length; i++) {
+    const item = state.powerup[i];
+    rect(item[0] * state.tileSize, item[1] * state.tileSize, state.tileSize, state.tileSize, config.colors.power);
   }
 }
 
-function eatsFood(head) {
-  let eats = false;
-  for (var i = 0; i < food.length; i++) {
-    if (head[0] === food[i][0] && head[1] === food[i][1]) {
-      velocity += 2;
-      food.splice(i, 1);
-      food.push(randomFood());
-      eats = true;
-      break;
-    }
-  }
-  return eats;
+function computeNextHead() {
+  const last = state.snake[state.snake.length - 1];
+  return [last[0] + state.direction[0], last[1] + state.direction[1]];
 }
 
-function eatsPower(head) {
-  let eats = false;
-  for (let i = 0; i < powerup.length; i++) {
-    if (head[0] === powerup[i][0] && head[1] === powerup[i][1]) {
-      powerup.splice(i, 1);
-      eats = true;
-      break;
-    }
-  }
-  return eats;
-}
+function wrapPosition(pos) {
+  const border = config.tiles - 1;
 
-function eatsItself(head) {
-  let eats = false;
-  for (var i = 0; i < snake.length - 1; i++) {
-    if (head[0] === snake[i][0] && head[1] === snake[i][1]) {
-      velocity = 0;
-      eats = true;
-      break;
-    }
-  }
-  return eats;
-}
-
-function updateSnake() {
-  let shouldShift = true;
-  let last = snake[snake.length - 1];
-  let head = [last[0] + direction[0], last[1] + direction[1]];
-
-  let border = tiles - 1;
-
-  if (head[0] < 0) {
-    head[0] = border;
-  } else if (head[0] > border) {
-    head[0] = 0;
+  if (pos[0] < 0) {
+    pos[0] = border;
+  } else if (pos[0] > border) {
+    pos[0] = 0;
   }
 
-  if (head[1] < 0) {
-    head[1] = border;
-  } else if (head[1] > border) {
-    head[1] = 0;
+  if (pos[1] < 0) {
+    pos[1] = border;
+  } else if (pos[1] > border) {
+    pos[1] = 0;
   }
-
-  snake.push(head);
-
-  if (!eatsFood(head)) {
-    snake.shift();
-  }
-
-  if (eatsItself(head)) {
-    stopGame();
-  }
-
-  if (eatsPower(head)) {
-    velocity = Math.ceil(velocity / 2);
-  }
-
-  if (powerup.length === 0 && velocity > 15 && Math.random() < 0.001) {
-    powerup.push(randomPower());
-  }
-}
-
-function stopGame() {
-  clearInterval(running);
-}
-
-function randomFood() {
-  let food_x = Math.floor(Math.random() * tiles);
-  let food_y = Math.floor(Math.random() * tiles);
-
-  for (var i = 0; i < snake.length; i++) {
-    if (snake[i][0] === food_x && snake[i][1] === food_y) {
-      return randomFood();
-    }
-  }
-  return [food_x, food_y];
-}
-
-function randomPower() {
-  let pos = randomFood();
 
   return pos;
 }
 
-function init() {
-  setListeners();
-  running = setInterval(updateGame, 1000 / frames_per_second);
+function handleFoodCollision(head) {
+  for (let i = 0; i < state.food.length; i++) {
+    if (!samePos(head, state.food[i])) {
+      continue;
+    }
+
+    state.velocity += 2;
+    state.food.splice(i, 1);
+    state.food.push(randomFood());
+    return true;
+  }
+
+  return false;
 }
 
+function handlePowerCollision(head) {
+  for (let i = 0; i < state.powerup.length; i++) {
+    if (!samePos(head, state.powerup[i])) {
+      continue;
+    }
+
+    state.powerup.splice(i, 1);
+    return true;
+  }
+
+  return false;
+}
+
+function handleSelfCollision(head) {
+  const headKey = toKey(head);
+  for (let i = 0; i < state.snake.length - 1; i++) {
+    if (headKey === toKey(state.snake[i])) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function advanceSnake() {
+  if (state.gameOver) {
+    return;
+  }
+
+  const head = wrapPosition(computeNextHead());
+  state.snake.push(head);
+
+  if (!handleFoodCollision(head)) {
+    state.snake.shift();
+  }
+
+  if (handleSelfCollision(head)) {
+    state.gameOver = true;
+    stopGame();
+    return;
+  }
+
+  if (handlePowerCollision(head)) {
+    state.velocity = Math.ceil(state.velocity / 2);
+  }
+
+  if (
+    state.powerup.length === 0 &&
+    state.velocity > config.powerupSpawnVelocityMin &&
+    Math.random() < config.powerupSpawnChance
+  ) {
+    state.powerup.push(randomPower());
+  }
+}
+
+function stopGame() {
+  if (state.running !== null) {
+    clearInterval(state.running);
+    state.running = null;
+  }
+}
+
+function randomFood() {
+  const foodX = Math.floor(Math.random() * config.tiles);
+  const foodY = Math.floor(Math.random() * config.tiles);
+  const foodPos = [foodX, foodY];
+
+  for (let i = 0; i < state.snake.length; i++) {
+    if (samePos(state.snake[i], foodPos)) {
+      return randomFood();
+    }
+  }
+
+  return foodPos;
+}
+
+function randomPower() {
+  return randomFood();
+}
+
+function init() {
+  state.tileSize = canvas.width / config.tiles;
+  state.food = [randomFood()];
+  setListeners();
+  state.running = setInterval(updateGame, 1000 / config.framesPerSecond);
+}
+
+window.addEventListener('load', init);
+
 function updateGame() {
-  frame += 1;
+  state.frame += 1;
   drawGrid();
   drawSnake();
   drawFood();
   drawPowerup();
 
-  if (forceUpdate || frame % Math.ceil(frames_per_second / velocity) === 0) {
-    forceUpdate = false;
-    updateSnake();
+  if (
+    state.forceUpdate ||
+    state.frame % Math.ceil(config.framesPerSecond / state.velocity) === 0
+  ) {
+    state.forceUpdate = false;
+    advanceSnake();
   }
 }
