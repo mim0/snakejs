@@ -144,7 +144,10 @@ function handleFoodCollision(head) {
 
     state.velocity += 2;
     state.food.splice(i, 1);
-    state.food.push(randomFood());
+    const nextFood = randomFood();
+    if (nextFood !== null) {
+      state.food.push(nextFood);
+    }
     return true;
   }
 
@@ -202,7 +205,10 @@ function advanceSnake() {
     state.velocity > config.powerupSpawnVelocityMin &&
     Math.random() < config.powerupSpawnChance
   ) {
-    state.powerup.push(randomPower());
+    const nextPower = randomPower();
+    if (nextPower !== null) {
+      state.powerup.push(nextPower);
+    }
   }
 }
 
@@ -213,27 +219,54 @@ function stopGame() {
   }
 }
 
-function randomFood() {
-  const foodX = Math.floor(Math.random() * config.tiles);
-  const foodY = Math.floor(Math.random() * config.tiles);
-  const foodPos = [foodX, foodY];
+function randomFreeTile() {
+  const occupied = new Set();
 
   for (let i = 0; i < state.snake.length; i++) {
-    if (samePos(state.snake[i], foodPos)) {
-      return randomFood();
+    occupied.add(toKey(state.snake[i]));
+  }
+
+  for (let i = 0; i < state.food.length; i++) {
+    occupied.add(toKey(state.food[i]));
+  }
+
+  for (let i = 0; i < state.powerup.length; i++) {
+    occupied.add(toKey(state.powerup[i]));
+  }
+
+  const freeTiles = [];
+
+  for (let y = 0; y < config.tiles; y++) {
+    for (let x = 0; x < config.tiles; x++) {
+      if (occupied.has(`${x},${y}`)) {
+        continue;
+      }
+
+      freeTiles.push([x, y]);
     }
   }
 
-  return foodPos;
+  if (freeTiles.length === 0) {
+    return null;
+  }
+
+  return freeTiles[Math.floor(Math.random() * freeTiles.length)];
+}
+
+function randomFood() {
+  return randomFreeTile();
 }
 
 function randomPower() {
-  return randomFood();
+  return randomFreeTile();
 }
 
 function init() {
   state.tileSize = canvas.width / config.tiles;
-  state.food = [randomFood()];
+  const initialFood = randomFood();
+  if (initialFood !== null) {
+    state.food = [initialFood];
+  }
   setListeners();
   state.running = setInterval(updateGame, 1000 / config.framesPerSecond);
 }
